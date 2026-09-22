@@ -1,0 +1,920 @@
+{
+  "datasets": [
+    {
+      "name": "zip_efficiency",
+      "displayName": "ZIP Code Resolution Efficiency",
+      "queryLines": [
+        "WITH zip_totals AS (\n",
+        "  SELECT\n",
+        "    incident_zip,\n",
+        "    borough,\n",
+        "    COUNT(*) AS total_received,\n",
+        "    SUM(CASE WHEN status != 'Closed' THEN 1 ELSE 0 END) AS unresolved_count\n",
+        "  FROM\n",
+        "    nyc_data.default.rat_sightings\n",
+        "  WHERE\n",
+        "    borough != 'Unspecified'\n",
+        "        AND latitude IS NOT NULL\n",
+        "    AND longitude IS NOT NULL\n",
+        "    AND latitude BETWEEN 40.4 AND 41.0\n",
+        "    AND longitude BETWEEN -74.3 AND -73.7\n",
+        "  GROUP BY\n",
+        "    incident_zip, borough\n",
+        ")\n",
+        "SELECT\n",
+        "  rs.incident_zip,\n",
+        "  rs.borough,\n",
+        "  ROUND(AVG(rs.latitude), 5) AS lat,\n",
+        "  ROUND(AVG(rs.longitude), 5) AS lng,\n",
+        "  COUNT(*) AS total_closed,\n",
+        "  MAX(zt.total_received) AS total_received,\n",
+        "  MAX(zt.unresolved_count) AS unresolved_count,\n",
+        "  ROUND(AVG(DATEDIFF(rs.closed_date, rs.created_date)), 1) AS avg_days,\n",
+        "  percentile_approx(DATEDIFF(rs.closed_date, rs.created_date), 0.5) AS median_days,\n",
+        "  ROUND(\n",
+        "    SUM(\n",
+        "      CASE\n",
+        "        WHEN DATEDIFF(rs.closed_date, rs.created_date) = 0 THEN 1\n",
+        "        ELSE 0\n",
+        "      END\n",
+        "    )\n",
+        "      * 100.0\n",
+        "      / COUNT(*),\n",
+        "    1\n",
+        "  ) AS same_day_pct,\n",
+        "  ROUND(\n",
+        "    SUM(\n",
+        "      CASE\n",
+        "        WHEN DATEDIFF(rs.closed_date, rs.created_date) > 14 THEN 1\n",
+        "        ELSE 0\n",
+        "      END\n",
+        "    )\n",
+        "      * 100.0\n",
+        "      / COUNT(*),\n",
+        "    1\n",
+        "  ) AS slow_resolution_pct,\n",
+        "  ROUND(\n",
+        "    COUNT(*) * 1.0 / NULLIF(AVG(DATEDIFF(rs.closed_date, rs.created_date)), 0),\n",
+        "    1\n",
+        "  ) AS efficiency_score,\n",
+        "  CASE\n",
+        "    WHEN\n",
+        "      ROUND(COUNT(*) * 1.0 / NULLIF(AVG(DATEDIFF(rs.closed_date, rs.created_date)), 0), 1) >= 200\n",
+        "    THEN\n",
+        "      'Excellent (200+)'\n",
+        "    WHEN\n",
+        "      ROUND(COUNT(*) * 1.0 / NULLIF(AVG(DATEDIFF(rs.closed_date, rs.created_date)), 0), 1) >= 100\n",
+        "    THEN\n",
+        "      'Good (100-199)'\n",
+        "    WHEN\n",
+        "      ROUND(COUNT(*) * 1.0 / NULLIF(AVG(DATEDIFF(rs.closed_date, rs.created_date)), 0), 1) >= 50\n",
+        "    THEN\n",
+        "      'Fair (50-99)'\n",
+        "    ELSE 'Needs Improvement (<50)'\n",
+        "  END AS efficiency_tier\n",
+        "FROM\n",
+        "  nyc_data.default.rat_sightings rs\n",
+        "    JOIN zip_totals zt\n",
+        "      ON rs.incident_zip = zt.incident_zip\n",
+        "      AND rs.borough = zt.borough\n",
+        "WHERE\n",
+        "  rs.status = 'Closed'\n",
+        "  AND rs.borough != 'Unspecified'\n",
+        "  AND rs.latitude IS NOT NULL\n",
+        "  AND rs.longitude IS NOT NULL\n",
+        "  AND rs.latitude BETWEEN 40.4 AND 41.0\n",
+        "  AND rs.longitude BETWEEN -74.3 AND -73.7\n",
+        "GROUP BY\n",
+        "  rs.incident_zip,\n",
+        "  rs.borough\n",
+        "HAVING\n",
+        "  COUNT(*) >= 1\n",
+        "ORDER BY\n",
+        "  efficiency_score DESC"
+      ],
+      "catalog": "nyc_data",
+      "schema": "default"
+    }
+  ],
+  "pages": [
+    {
+      "name": "a8faae37",
+      "displayName": "Page 1",
+      "layout": [
+        {
+          "widget": {
+            "name": "efficiency_map",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "efficiency_tier",
+                      "expression": "`efficiency_tier`"
+                    },
+                    {
+                      "name": "lat",
+                      "expression": "`lat`"
+                    },
+                    {
+                      "name": "lng",
+                      "expression": "`lng`"
+                    },
+                    {
+                      "name": "incident_zip",
+                      "expression": "`incident_zip`"
+                    },
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "efficiency_score",
+                      "expression": "`efficiency_score`"
+                    },
+                    {
+                      "name": "avg_days",
+                      "expression": "`avg_days`"
+                    },
+                    {
+                      "name": "total_closed",
+                      "expression": "`total_closed`"
+                    },
+                    {
+                      "name": "total_received",
+                      "expression": "`total_received`"
+                    },
+                    {
+                      "name": "unresolved_count",
+                      "expression": "`unresolved_count`"
+                    },
+                    {
+                      "name": "same_day_pct",
+                      "expression": "`same_day_pct`"
+                    },
+                    {
+                      "name": "slow_resolution_pct",
+                      "expression": "`slow_resolution_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": {
+                  "value": "NYC Rat Complaint Resolution Efficiency by ZIP Code",
+                  "fields": []
+                },
+                "description": {
+                  "value": "Color = efficiency tier (green=excellent, blue=good, yellow=fair, red=needs improvement). Size = total closed complaints. Hover for total received, unresolved complaints, and resolution time details. Covers ZIP codes 10001 through 11497 across all five boroughs.",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "mark": {
+                "opacity": 0.8,
+                "size": 1
+              },
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "coordinateType": "longitude-latitude",
+                  "latitude": {
+                    "fieldName": "lat"
+                  },
+                  "longitude": {
+                    "fieldName": "lng"
+                  }
+                },
+                "color": {
+                  "fieldName": "efficiency_tier",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "color": "#008000",
+                        "value": "Excellent (200+)"
+                      },
+                      {
+                        "color": "#0066CC",
+                        "value": "Good (100-199)"
+                      },
+                      {
+                        "color": "#FFD700",
+                        "value": "Fair (50-99)"
+                      },
+                      {
+                        "color": "#FF0000",
+                        "value": "Needs Improvement (<50)"
+                      }
+                    ]
+                  }
+                },
+                "size": {
+                  "fieldName": "total_closed",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "incident_zip",
+                    "format": {
+                      "abbreviation": "none",
+                      "hideGroupSeparator": true,
+                      "type": "number-plain"
+                    },
+                    "displayName": "ZIP Code"
+                  },
+                  {
+                    "fieldName": "borough",
+                    "displayName": "Borough"
+                  },
+                  {
+                    "fieldName": "efficiency_score",
+                    "displayName": "Efficiency Score"
+                  },
+                  {
+                    "fieldName": "avg_days",
+                    "displayName": "Avg Resolution Days"
+                  },
+                  {
+                    "fieldName": "total_closed",
+                    "displayName": "Total Closed"
+                  },
+                  {
+                    "fieldName": "total_received",
+                    "displayName": "Total Received"
+                  },
+                  {
+                    "fieldName": "unresolved_count",
+                    "displayName": "Unresolved Complaints"
+                  },
+                  {
+                    "fieldName": "same_day_pct",
+                    "displayName": "Same Day %"
+                  },
+                  {
+                    "fieldName": "slow_resolution_pct",
+                    "displayName": "Slow Resolution % (>14 days)"
+                  },
+                  {
+                    "fieldName": "efficiency_tier",
+                    "displayName": "Efficiency Tier"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 14
+          }
+        },
+        {
+          "widget": {
+            "name": "zip_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b42db74419b4b05bb73abbae1fb3/datasets/01f1b42dcfea1229bb09f3b6f1864728_incident_zip",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "incident_zip",
+                      "expression": "`incident_zip`"
+                    },
+                    {
+                      "name": "incident_zip_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Select ZIP Code",
+                  "fields": []
+                }
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "incident_zip",
+                    "queryName": "dashboards/01f1b42db74419b4b05bb73abbae1fb3/datasets/01f1b42dcfea1229bb09f3b6f1864728_incident_zip"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_total_closed",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "sum(total_closed)",
+                      "expression": "SUM(`total_closed`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total Closed Complaints"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(total_closed)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 14,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_avg_days",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "avg(avg_days)",
+                      "expression": "AVG(`avg_days`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Avg Resolution Days"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(avg_days)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 14,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_efficiency",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "avg(efficiency_score)",
+                      "expression": "AVG(`efficiency_score`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Efficiency Score"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(efficiency_score)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 10,
+            "y": 14,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_same_day",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "avg(same_day_pct)",
+                      "expression": "AVG(`same_day_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Same Day Resolution %"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(same_day_pct)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_slow",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "avg(slow_resolution_pct)",
+                      "expression": "AVG(`slow_resolution_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Slow Resolution % (>14 days)"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(slow_resolution_pct)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 16,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "zip_detail_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "incident_zip",
+                      "expression": "`incident_zip`"
+                    },
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "total_closed",
+                      "expression": "`total_closed`"
+                    },
+                    {
+                      "name": "total_received",
+                      "expression": "`total_received`"
+                    },
+                    {
+                      "name": "unresolved_count",
+                      "expression": "`unresolved_count`"
+                    },
+                    {
+                      "name": "avg_days",
+                      "expression": "`avg_days`"
+                    },
+                    {
+                      "name": "median_days",
+                      "expression": "`median_days`"
+                    },
+                    {
+                      "name": "same_day_pct",
+                      "expression": "`same_day_pct`"
+                    },
+                    {
+                      "name": "slow_resolution_pct",
+                      "expression": "`slow_resolution_pct`"
+                    },
+                    {
+                      "name": "efficiency_score",
+                      "expression": "`efficiency_score`"
+                    },
+                    {
+                      "name": "efficiency_tier",
+                      "expression": "`efficiency_tier`"
+                    }
+                  ],
+                  "disaggregated": true,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "`efficiency_tier`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "ZIP Code Detail Table",
+                  "fields": []
+                }
+              },
+              "bandedRows": {
+                "enabled": true
+              },
+              "headerHeight": 40,
+              "headerStyle": {
+                "fontFamily": "Inter",
+                "fontSize": 13,
+                "fontWeight": 700
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "incident_zip",
+                    "headerAlignment": "center",
+                    "contentAlignment": "center",
+                    "columnWidth": 90,
+                    "useForSearch": true,
+                    "displayName": "ZIP Code"
+                  },
+                  {
+                    "fieldName": "borough",
+                    "headerAlignment": "left",
+                    "contentAlignment": "left",
+                    "columnWidth": 110,
+                    "useForSearch": true,
+                    "displayName": "Borough"
+                  },
+                  {
+                    "fieldName": "total_closed",
+                    "headerAlignment": "right",
+                    "contentAlignment": "right",
+                    "columnWidth": 90,
+                    "displayName": "Total Closed"
+                  },
+                  {
+                    "fieldName": "total_received",
+                    "headerAlignment": "right",
+                    "columnWidth": 100,
+                    "contentAlignment": "right",
+                    "displayName": "Total Received"
+                  },
+                  {
+                    "fieldName": "unresolved_count",
+                    "headerAlignment": "right",
+                    "columnWidth": 100,
+                    "contentAlignment": "right",
+                    "displayName": "Unresolved",
+                    "style": {
+                      "type": "basic",
+                      "rules": [
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "0"
+                            },
+                            "operator": ">"
+                          },
+                          "foregroundColor": "#F57F17",
+                          "fontWeight": 600
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "0"
+                            },
+                            "operator": "="
+                          },
+                          "foregroundColor": "#2E7D32"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "fieldName": "avg_days",
+                    "headerAlignment": "right",
+                    "contentAlignment": "right",
+                    "columnWidth": 80,
+                    "displayName": "Avg Days"
+                  },
+                  {
+                    "fieldName": "median_days",
+                    "headerAlignment": "right",
+                    "contentAlignment": "right",
+                    "columnWidth": 90,
+                    "displayName": "Median Days"
+                  },
+                  {
+                    "fieldName": "same_day_pct",
+                    "headerAlignment": "right",
+                    "contentAlignment": "right",
+                    "columnWidth": 90,
+                    "displayName": "Same Day %"
+                  },
+                  {
+                    "fieldName": "slow_resolution_pct",
+                    "headerAlignment": "right",
+                    "contentAlignment": "right",
+                    "columnWidth": 110,
+                    "displayName": "Slow Resolution %"
+                  },
+                  {
+                    "fieldName": "efficiency_score",
+                    "headerAlignment": "right",
+                    "contentAlignment": "right",
+                    "columnWidth": 100,
+                    "displayName": "Efficiency Score"
+                  },
+                  {
+                    "fieldName": "efficiency_tier",
+                    "headerAlignment": "center",
+                    "contentAlignment": "center",
+                    "columnWidth": 160,
+                    "displayName": "Efficiency Tier",
+                    "style": {
+                      "type": "basic",
+                      "rules": [
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "Excellent (200+)"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": "#E8F5E9",
+                          "foregroundColor": "#2E7D32",
+                          "fontWeight": 600
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "Good (100-199)"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": "#E3F2FD",
+                          "foregroundColor": "#0066CC",
+                          "fontWeight": 600
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "Fair (50-99)"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": "#FFF8E1",
+                          "foregroundColor": "#F57F17",
+                          "fontWeight": 600
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "Needs Improvement (<50)"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": "#FFEBEE",
+                          "foregroundColor": "#C62828",
+                          "fontWeight": 600
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "rowOrder": [
+                  {
+                    "by": "column-reversed",
+                    "field": {
+                      "index": 10
+                    }
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 16,
+            "width": 8,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tier_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b42db74419b4b05bb73abbae1fb3/datasets/01f1b42dcfea1229bb09f3b6f1864728_efficiency_tier",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "efficiency_tier",
+                      "expression": "`efficiency_tier`"
+                    },
+                    {
+                      "name": "efficiency_tier_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Efficiency Tier",
+                  "fields": []
+                }
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "efficiency_tier",
+                    "queryName": "dashboards/01f1b42db74419b4b05bb73abbae1fb3/datasets/01f1b42dcfea1229bb09f3b6f1864728_efficiency_tier"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 14,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "borough_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b42db74419b4b05bb73abbae1fb3/datasets/01f1b42dcfea1229bb09f3b6f1864728_borough",
+                "query": {
+                  "datasetName": "zip_efficiency",
+                  "fields": [
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "borough_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Borough"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "borough",
+                    "queryName": "dashboards/01f1b42db74419b4b05bb73abbae1fb3/datasets/01f1b42dcfea1229bb09f3b6f1864728_borough"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 14,
+            "width": 2,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}

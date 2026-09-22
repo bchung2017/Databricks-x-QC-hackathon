@@ -1,0 +1,947 @@
+{
+  "datasets": [
+    {
+      "name": "4e2b54cc",
+      "displayName": "Rodent Activity and Restaurant Inspection Summary NYC",
+      "queryLines": [
+        "SELECT\r\n",
+        "  zip_code,\r\n",
+        "  borough,\r\n",
+        "  distinct_restaurant_count,\r\n",
+        "  inspection_event_count,\r\n",
+        "  avg_inspection_score,\r\n",
+        "  rodent_evidence_restaurant_pct,\r\n",
+        "  COALESCE(rodent_complaint_count, 0)  AS rodent_complaint_count,\r\n",
+        "  COALESCE(rat_sighting_count, 0)      AS rat_sighting_count,\r\n",
+        "  COALESCE(mouse_sighting_count, 0)    AS mouse_sighting_count,\r\n",
+        "  COALESCE(signs_of_rodents_count, 0)  AS signs_of_rodents_count,\r\n",
+        "  COALESCE(complaints_last_90d, 0)     AS complaints_last_90d,\r\n",
+        "  avg_days_to_close,\r\n",
+        "  centroid_lat,\r\n",
+        "  centroid_lon,\r\n",
+        "  has_rodent_data\r\n",
+        "FROM nyc_data.default.rodent_restaurant_merge_unix_zip;"
+      ]
+    },
+    {
+      "name": "f00bd052",
+      "displayName": "service_gap_index_zip_seasonal",
+      "config": {
+        "source": "nyc_data.default.service_gap_index_zip_seasonal",
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          },
+          {
+            "name": "total_reports",
+            "expr": "SUM(`demand_raw`)",
+            "displayName": "Total Reports"
+          }
+        ],
+        "filter": "centroid_lat IS NOT NULL",
+        "version": "1.1",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ]
+      }
+    },
+    {
+      "name": "borough_monthly",
+      "displayName": "Borough Monthly Trends",
+      "config": {
+        "source": "WITH d AS (\n  SELECT INITCAP(borough) AS borough, DATE_TRUNC('month', created_date) AS month,\n         COUNT(*) AS complaints\n  FROM nyc_data.default.rat_sightings\n  WHERE descriptor IN ('Rat Sighting','Mouse Sighting','Signs of Rodents')\n    AND borough <> 'Unspecified'\n  GROUP BY 1, 2\n),\ne AS (\n  SELECT camis, zip_normalized, inspection_date, has_direct_rodent_evidence,\n         LEAD(inspection_date) OVER (PARTITION BY camis ORDER BY inspection_date) AS next_date\n  FROM nyc_data.default.restaurant_inspection_events_v2\n  WHERE zip_normalized IS NOT NULL\n),\ni AS (\n  SELECT m.most_common_borough AS borough, DATE_TRUNC('month', e.inspection_date) AS month,\n         COUNT(*) AS inspections,\n         COUNT_IF(e.has_direct_rodent_evidence) AS rodent_hits,\n         CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY\n           CASE WHEN e.has_direct_rodent_evidence THEN DATEDIFF(e.next_date, e.inspection_date) END) AS INT)\n         AS median_followup_days\n  FROM e JOIN nyc_data.default.restaurant_zip_metrics_v4 m ON e.zip_normalized = m.zip_code\n  GROUP BY 1, 2\n),\nfinal AS (\n  SELECT COALESCE(d.borough, i.borough) AS borough,\n         COALESCE(d.month, i.month)     AS month,\n         d.complaints, i.inspections, i.rodent_hits, i.median_followup_days,\n         i.inspections / NULLIF(d.complaints, 0) AS inspections_per_complaint\n  FROM d FULL OUTER JOIN i ON d.borough = i.borough AND d.month = i.month\n  WHERE COALESCE(d.borough, i.borough) IS NOT NULL\n    AND COALESCE(d.borough, i.borough) <> 'Missing'\n)\nSELECT borough, month, '311 Complaints' AS metric, CAST(complaints AS DOUBLE) AS value FROM final WHERE complaints IS NOT NULL\nUNION ALL\nSELECT borough, month, 'Median Follow-up Days' AS metric, CAST(median_followup_days AS DOUBLE) AS value FROM final WHERE median_followup_days IS NOT NULL\nUNION ALL\nSELECT borough, month, 'Inspections per Complaint' AS metric, inspections_per_complaint AS value FROM final WHERE inspections_per_complaint IS NOT NULL\n",
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)"
+          }
+        ],
+        "filter": "month >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '12 MONTHS') AND month < DATE_TRUNC('month', CURRENT_DATE)",
+        "version": "1.1",
+        "dimensions": [
+          {
+            "name": "borough",
+            "expr": "borough"
+          },
+          {
+            "name": "month",
+            "expr": "month"
+          },
+          {
+            "name": "metric",
+            "expr": "metric"
+          },
+          {
+            "name": "value",
+            "expr": "value"
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "da6accd8",
+      "displayName": "Global Filters",
+      "layout": [
+        {
+          "widget": {
+            "name": "d9e35594",
+            "queries": [
+              {
+                "name": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b46435e2190ca82b7ad9119dafcb_zip_code",
+                "query": {
+                  "datasetName": "4e2b54cc",
+                  "fields": [
+                    {
+                      "name": "zip_code",
+                      "expression": "`zip_code`"
+                    },
+                    {
+                      "name": "zip_code_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "zip_code",
+                    "queryName": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b46435e2190ca82b7ad9119dafcb_zip_code"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "c1cc54e6",
+      "displayName": "Service Gap NYC Map",
+      "layout": [
+        {
+          "widget": {
+            "name": "service_gap_map",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "f00bd052",
+                  "fields": [
+                    {
+                      "name": "service_gap_index",
+                      "expression": "`service_gap_index`"
+                    },
+                    {
+                      "name": "centroid_lat",
+                      "expression": "`centroid_lat`"
+                    },
+                    {
+                      "name": "centroid_lon",
+                      "expression": "`centroid_lon`"
+                    },
+                    {
+                      "name": "zip_code",
+                      "expression": "`zip_code`"
+                    },
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "season",
+                      "expression": "`season`"
+                    },
+                    {
+                      "name": "gap_rank",
+                      "expression": "`gap_rank`"
+                    },
+                    {
+                      "name": "confidence",
+                      "expression": "`confidence`"
+                    },
+                    {
+                      "name": "demand_raw",
+                      "expression": "`demand_raw`"
+                    },
+                    {
+                      "name": "followup_days_raw",
+                      "expression": "`followup_days_raw`"
+                    },
+                    {
+                      "name": "recurrence_raw",
+                      "expression": "`recurrence_raw`"
+                    },
+                    {
+                      "name": "coverage_raw",
+                      "expression": "`coverage_raw`"
+                    },
+                    {
+                      "name": "measure(total_reports)",
+                      "expression": "MEASURE(`total_reports`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`centroid_lat` IS NOT NULL"
+                    },
+                    {
+                      "expression": "`borough` IN ('Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": {
+                  "value": "NYC Rodent Service Gap Index by ZIP",
+                  "fields": []
+                },
+                "description": {
+                  "value": "Color = service gap (red = residents call more than inspections respond, blue = inspection response outpaces calls)\n\nCircle size = 311 report volume",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "mark": {
+                "size": 0
+              },
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "coordinateType": "longitude-latitude",
+                  "latitude": {
+                    "fieldName": "centroid_lat"
+                  },
+                  "longitude": {
+                    "fieldName": "centroid_lon"
+                  }
+                },
+                "color": {
+                  "fieldName": "service_gap_index",
+                  "legend": {
+                    "position": "right"
+                  },
+                  "scale": {
+                    "type": "quantitative",
+                    "colorRamp": {
+                      "mode": "custom-diverging",
+                      "colors": {
+                        "start": "#313695",
+                        "mid": "#FFFFFF",
+                        "end": "#A50026"
+                      }
+                    },
+                    "domain": {
+                      "type": "custom",
+                      "min": -1,
+                      "max": 1,
+                      "mid": 0
+                    }
+                  }
+                },
+                "size": {
+                  "fieldName": "measure(total_reports)",
+                  "scale": {
+                    "type": "quantitative",
+                    "domain": {
+                      "type": "custom",
+                      "min": 0,
+                      "max": 700
+                    },
+                    "fn": {
+                      "type": "symlog"
+                    }
+                  },
+                  "displayName": "311 Reports"
+                },
+                "extra": [
+                  {
+                    "fieldName": "zip_code",
+                    "displayName": "ZIP"
+                  },
+                  {
+                    "fieldName": "borough",
+                    "displayName": "Borough"
+                  },
+                  {
+                    "fieldName": "season",
+                    "displayName": "Season"
+                  },
+                  {
+                    "fieldName": "service_gap_index",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 2
+                      }
+                    },
+                    "displayName": "Service gap index"
+                  },
+                  {
+                    "fieldName": "gap_rank",
+                    "displayName": "Rank (of 218)"
+                  },
+                  {
+                    "fieldName": "confidence",
+                    "displayName": "Confidence"
+                  },
+                  {
+                    "fieldName": "demand_raw",
+                    "displayName": "311 rodent complaints"
+                  },
+                  {
+                    "fieldName": "followup_days_raw",
+                    "displayName": "Days to re-inspect after rodent violation"
+                  },
+                  {
+                    "fieldName": "recurrence_raw",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    },
+                    "formatTemplate": "{{ @formatted }}%",
+                    "displayName": "Rodent recurrence on re-inspection (%)"
+                  },
+                  {
+                    "fieldName": "coverage_raw",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 2
+                      }
+                    },
+                    "displayName": "Inspections per restaurant"
+                  },
+                  {
+                    "fieldName": "measure(total_reports)",
+                    "displayName": "311 Reports (circle size)"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "zip_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b49f38381e6abf7e0900f093ac05_zip_code",
+                "query": {
+                  "datasetName": "f00bd052",
+                  "fields": [
+                    {
+                      "name": "zip_code",
+                      "expression": "`zip_code`"
+                    },
+                    {
+                      "name": "zip_code_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "showDescription": false,
+                "title": {
+                  "value": "Select ZIP Code",
+                  "fields": []
+                },
+                "description": {
+                  "fields": [],
+                  "value": "218 ZIP codes across all five boroughs"
+                }
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "zip_code",
+                    "queryName": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b49f38381e6abf7e0900f093ac05_zip_code"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "borough_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b49f38381e6abf7e0900f093ac05_borough",
+                "query": {
+                  "datasetName": "f00bd052",
+                  "fields": [
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "borough_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "showDescription": false,
+                "title": {
+                  "value": "Select Borough",
+                  "fields": []
+                },
+                "description": {
+                  "fields": [],
+                  "value": "5 boroughs"
+                }
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "borough",
+                    "queryName": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b49f38381e6abf7e0900f093ac05_borough"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "season_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b49f38381e6abf7e0900f093ac05_season",
+                "query": {
+                  "datasetName": "f00bd052",
+                  "fields": [
+                    {
+                      "name": "season",
+                      "expression": "`season`"
+                    },
+                    {
+                      "name": "season_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "disallowAll": true,
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "full"
+                      }
+                    ]
+                  }
+                }
+              },
+              "version": 2,
+              "frame": {
+                "showDescription": false,
+                "showTitle": true,
+                "title": "Select Season"
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "season",
+                    "queryName": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b49f38381e6abf7e0900f093ac05_season"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 1
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "1211e2ba",
+      "displayName": "Sevice Gap Seasonal Trends",
+      "layout": [
+        {
+          "widget": {
+            "name": "590f0795",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "borough_monthly",
+                  "fields": [
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": false,
+                "title": {
+                  "value": "Borough Monthly Trends",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "axis": {
+                    "labelAngle": 45,
+                    "title": "Month"
+                  },
+                  "format": {
+                    "date": "locale-short-month",
+                    "type": "date"
+                  },
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "value",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "borough",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "shape": {
+                  "fieldName": "borough",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "af9b441b",
+            "queries": [
+              {
+                "name": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b4ab60da150c945e2bda5c82fe25_metric",
+                "query": {
+                  "datasetName": "borough_monthly",
+                  "fields": [
+                    {
+                      "name": "metric",
+                      "expression": "`metric`"
+                    },
+                    {
+                      "name": "metric_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "disallowAll": true,
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "311 Complaints"
+                      }
+                    ]
+                  }
+                }
+              },
+              "version": 2,
+              "frame": {
+                "showDescription": false,
+                "showTitle": true,
+                "title": {
+                  "value": "Metric",
+                  "fields": []
+                }
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "metric",
+                    "queryName": "dashboards/01f1b463fb2518ee8acbba2b692dee4a/datasets/01f1b4ab60da150c945e2bda5c82fe25_metric"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "a62ab04a",
+      "displayName": "test_map",
+      "layout": [
+        {
+          "widget": {
+            "name": "0e211a4b",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "4e2b54cc",
+                  "fields": [
+                    {
+                      "name": "rodent_complaint_count",
+                      "expression": "`rodent_complaint_count`"
+                    },
+                    {
+                      "name": "centroid_lat",
+                      "expression": "`centroid_lat`"
+                    },
+                    {
+                      "name": "centroid_lon",
+                      "expression": "`centroid_lon`"
+                    },
+                    {
+                      "name": "zip_code",
+                      "expression": "`zip_code`"
+                    },
+                    {
+                      "name": "borough",
+                      "expression": "`borough`"
+                    },
+                    {
+                      "name": "avg_inspection_score",
+                      "expression": "`avg_inspection_score`"
+                    },
+                    {
+                      "name": "rodent_evidence_restaurant_pct",
+                      "expression": "`rodent_evidence_restaurant_pct`"
+                    },
+                    {
+                      "name": "inspection_event_count",
+                      "expression": "`inspection_event_count`"
+                    },
+                    {
+                      "name": "distinct_restaurant_count",
+                      "expression": "`distinct_restaurant_count`"
+                    },
+                    {
+                      "name": "rat_sighting_count",
+                      "expression": "`rat_sighting_count`"
+                    },
+                    {
+                      "name": "mouse_sighting_count",
+                      "expression": "`mouse_sighting_count`"
+                    },
+                    {
+                      "name": "signs_of_rodents_count",
+                      "expression": "`signs_of_rodents_count`"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`borough` IN ('Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island')"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": {
+                  "value": "NYC Rodent Complaints by ZIP",
+                  "fields": []
+                },
+                "description": {
+                  "value": "Circle size = restaurant inspection events per ZIP · Color = 311 rodent complaints",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "coordinateType": "longitude-latitude",
+                  "latitude": {
+                    "fieldName": "centroid_lat"
+                  },
+                  "longitude": {
+                    "fieldName": "centroid_lon"
+                  }
+                },
+                "color": {
+                  "fieldName": "rodent_complaint_count",
+                  "legend": {
+                    "position": "right"
+                  },
+                  "scale": {
+                    "type": "quantitative",
+                    "colorRamp": {
+                      "mode": "scheme",
+                      "scheme": "reds"
+                    }
+                  }
+                },
+                "size": {
+                  "fieldName": "inspection_event_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "shape": {
+                  "fieldName": "borough",
+                  "legend": {
+                    "position": "bottom",
+                    "title": "Borough"
+                  },
+                  "scale": {
+                    "mappings": [
+                      {
+                        "shape": "circle",
+                        "value": "Manhattan"
+                      },
+                      {
+                        "shape": "square",
+                        "value": "Brooklyn"
+                      },
+                      {
+                        "shape": "triangle-up",
+                        "value": "Queens"
+                      },
+                      {
+                        "shape": "diamond",
+                        "value": "Bronx"
+                      },
+                      {
+                        "shape": "star",
+                        "value": "Staten Island"
+                      }
+                    ],
+                    "type": "categorical"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "zip_code"
+                  },
+                  {
+                    "fieldName": "borough"
+                  },
+                  {
+                    "fieldName": "avg_inspection_score",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    },
+                    "displayName": "── INSPECTION ──"
+                  },
+                  {
+                    "fieldName": "rodent_evidence_restaurant_pct",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    },
+                    "formatTemplate": "{{ @formatted }}%",
+                    "displayName": "  ⮞ rodent evidence %"
+                  },
+                  {
+                    "fieldName": "inspection_event_count",
+                    "displayName": "  ⮞ inspection events"
+                  },
+                  {
+                    "fieldName": "distinct_restaurant_count",
+                    "displayName": "  ⮞ restaurants"
+                  },
+                  {
+                    "fieldName": "rodent_complaint_count",
+                    "displayName": "── 311 COMPLAINTS ──"
+                  },
+                  {
+                    "fieldName": "rat_sighting_count",
+                    "displayName": "  ⮞ rat sightings"
+                  },
+                  {
+                    "fieldName": "mouse_sighting_count",
+                    "displayName": "  ⮞ mouse sightings"
+                  },
+                  {
+                    "fieldName": "signs_of_rodents_count",
+                    "displayName": "  ⮞ signs of rodents"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "borough_shape_legend",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Borough Shape Legend\n",
+                "\n",
+                "| Borough | Map Symbol |\n",
+                "| --- | --- |\n",
+                "| Manhattan | ● Circle |\n",
+                "| Brooklyn | ■ Square |\n",
+                "| Queens | ▲ Triangle |\n",
+                "| Bronx | ◆ Diamond |\n",
+                "| Staten Island | ★ Star |"
+              ]
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 10
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
